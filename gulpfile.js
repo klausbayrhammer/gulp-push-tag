@@ -1,30 +1,35 @@
 var git = require('gulp-git');
 var bump = require('gulp-bump');
-var filter = require('gulp-filter');
-var tag_version = require('gulp-tag-version');
 var gulp = require('gulp');
+var runSequence = require('run-sequence');
+var fs = require('fs');
 
-function cb(obj) {
-    var stream = new require('stream').Transform({objectMode: true});
-    stream._transform = function (file, unused, callback) {
-        obj();
-        callback(null, file);
-    };
-    return stream;
-}
+gulp.task('publish', function (cb) {
+    runSequence('bump_patch', 'commit', 'tag', 'push', cb);
+});
 
 gulp.task('bump_patch', function () {
     return gulp.src('./package.json')
         .pipe(bump({type: 'patch'}))
-        .pipe(gulp.dest('./'))
-        .pipe(git.commit('release version'))
-        .pipe(filter('package.json'))
-        .pipe(tag_version())
-        .pipe(cb(function () {
-            git.push('origin', 'master', {args: " --tags --verbose"}, function (err) {
-                if (err) {
-                    throw err;
-                }
-            });
-        }));
+        .pipe(gulp.dest('./'));
 });
+
+gulp.task('commit', function () {
+    var version = getPackageJsonVersion();
+    return gulp.src('.')
+        .pipe(git.commit('Release ' + version));
+});
+
+gulp.task('tag', function (cb) {
+    var version = getPackageJsonVersion();
+
+    return git.tag(version, 'Created Tag for version ' + version, cb);
+});
+
+gulp.task('push', function (cb) {
+    git.push('origin', 'master', {args: " --tags --verbose"}, cb);
+});
+
+function getPackageJsonVersion () {
+    return JSON.parse(fs.readFileSync('./package.json', 'utf8')).version;
+}
